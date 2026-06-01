@@ -1,17 +1,18 @@
 <h1>Govern the Generative AI Hub: Controlling Foundation Model Access on SAP BTP</h1>
-<p>When you provision SAP AI Core's Generative AI Hub, you get access to 50+ foundation models through a single orchestration endpoint. One service key, all of OpenAI, Anthropic, Google, Meta -- ready to go. That works fine for a single team or a proof of concept, but as soon as multiple departments want access, questions arise: who is allowed to administer the tenant, use which models, how much can they spend, and can you enforce content safety centrally?</p>
+<p>When you provision SAP AI Core's Generative AI Hub, you get access to 50+ foundation models through a single orchestration endpoint. One service key, all of OpenAI, Anthropic, Google, Meta — ready to go. That works fine for a single team or a proof of concept, but as soon as multiple departments want access, questions arise: who is allowed to administer the tenant, use which models, how much can they spend, and can you enforce content safety centrally?</p>
 <p>This guide is split in two parts.</p>
 <p><strong>Part 1</strong> shows what advanced governance you get out of the box with the Content-as-a-Service (CaaS) mechanism. With a single YAML file the provider can hand consumers credentials that are structurally restricted and let them call orchestration without ever giving them admin access.</p>
-<p><strong>Part 2</strong> is about everything CaaS does <em>not</em> cover -- per-team model allowlists when orchestration is shared, token budgets, content-safety enforcement. We sketch a minimal FastAPI proxy that sits transparently between consumers and AI Core, and we run it live to show the principle. We deliberately stop short of a full reference implementation: the moment you want to govern more than orchestration (direct OpenAI/Anthropic/Gemini deployments), the proxy stops being a thin layer.</p>
+<p><strong>Part 2</strong> is about everything CaaS does <em>not</em> cover — per-team model allowlists when orchestration is shared, token budgets, content-safety enforcement. We sketch a minimal FastAPI proxy that sits transparently between consumers and AI Core, and we run it live to show the principle. We deliberately stop short of a full reference implementation: the moment you want to govern more than orchestration (direct OpenAI/Anthropic/Gemini deployments), the proxy stops being a thin layer.</p>
 <p>All examples use a real test environment: a provider subaccount that owns the AI Core instance, and a consumer subaccount that consumes through CaaS. Every curl and JSON response shown was captured live. This blog's purpose is to show you what is possible and where you need to head to achieve it.</p>
-<h2>One Instance per Team -- or One for Everyone?</h2>
+<p><img alt="Scenario: provider subaccount owning AI Core, consumer subaccounts consuming through CaaS, with an optional governance proxy in between" src="scenario.jpg" /></p>
+<h2>One Instance per Team — or One for Everyone?</h2>
 <p>Before governance tooling, there is a structural question: should each team get their own AI Core instance, or should you centralize?</p>
 <p>With foundation model APIs, the traditional cost argument for centralization does not apply. Unlike the older AI Core pattern of GPU-based model serving where sharing replicas saved real money, foundation models use token-based consumption. There is no GPU infrastructure to share that we manage ourselves. The orchestration "deployment" is an endpoint routing traffic to a provider's model deployment. Every team's tokens are billed per use regardless of how many orchestration endpoints exist.</p>
 <p>So centralization is a choice, not a necessity. Each team could provision their own AI Core instance in their own subaccount and get natural isolation through BTP entitlements and directory-level cost allocation.</p>
 <p>If you do choose to centralize, the practical benefits are: one place to see all usage across teams, faster onboarding (creating a service instance through a broker takes minutes), and a single integration point where you can enforce governance policies. That last point is exactly what we will make use of in the chapters that follow.</p>
 <h1>Part 1: Native CaaS Governance</h1>
 <p>The mechanism that makes centralized governance possible is SAP AI Core's <strong>Content-as-a-Service (CaaS)</strong> model. CaaS is a multi-tenant distribution mechanism: one subaccount (the provider) owns the AI Core instance and all its deployments. Other subaccounts (consumers) get access through a service broker that the provider publishes. When a consumer creates a service instance through this broker, they receive credentials that are structurally different from the provider's: fewer scopes, different identity, limited to a shared resource group.</p>
-<p>On a standard AI Core instance every service key is equivalent -- same <code>clientid</code>, same 47 scopes, same admin access. Creating "a key for Team Alpha" and "a key for Team Beta" gives you the illusion of separation with none of the substance. CaaS changes that.</p>
+<p>On a standard AI Core instance every service key is equivalent — same <code>clientid</code>, same 47 scopes, same admin access. Creating "a key for Team Alpha" and "a key for Team Beta" gives you the illusion of separation with none of the substance. CaaS changes that.</p>
 <h2>Setting Up CaaS</h2>
 <p>The provider does this once. After that, consumer onboarding is self-service.</p>
 <p><strong>1. Define the service in YAML.</strong> Commit this to the AI Core artifacts repository that is connected via GitOps. The flags here control what consumers can and cannot do:</p>
@@ -50,7 +51,7 @@ spec:
 </li-code>
 <p>The <code>extendCredentials.serviceUrls.AI_API_URL</code> is what every consumer binding will receive as their AI Core endpoint. In Part 2 we will swap this URL for a governance proxy and the consumer SDK will not notice.</p>
 <p><strong>2. AI Core registers the service broker.</strong> Once the YAML is applied, AI Core creates an Application and exposes a service broker behind a URL like <code>https://aisvc-&lt;id&gt;-foundation-model-service.servicebroker.&lt;region&gt;.aws.ml.hana.ondemand.com</code>. The broker is what consumer subaccounts will talk to when they create a service instance.</p>
-<p><strong>3. Provider deploys orchestration in the shared resource group.</strong> The shared RG is the only resource group consumers can see. Whatever the provider puts here is what consumers can call -- typically the orchestration deployment, which routes to all 50+ foundation models.</p>
+<p><strong>3. Provider deploys orchestration in the shared resource group.</strong> The shared RG is the only resource group consumers can see. Whatever the provider puts here is what consumers can call — typically the orchestration deployment, which routes to all 50+ foundation models.</p>
 <p><strong>4. Consumer subaccounts onboard.</strong> The provider registers the broker in each consumer subaccount with the BTP CLI:</p>
 <li-code lang="bash">btp register services/broker \
   --name foundation-model-broker \
@@ -60,7 +61,7 @@ spec:
 </li-code>
 <p>After that, the consumer is self-service: they create a service instance through the BTP catalog, then a binding, and receive credentials that include the injected <code>AI_API_URL</code>. Their SAP AI SDK uses those credentials without knowing or caring that a proxy may sit in front.</p>
 <blockquote>
-<p>The official AI Core CaaS documentation still describes the older Cloud Foundry-based broker registration flow (<code>cf create-service-broker</code> and friends). With BTP CLI 2.106+ the <code>btp register services/broker</code> command above is the supported path -- it works against any subaccount in the global account regardless of CF org/space layout.</p>
+<p>The official AI Core CaaS documentation still describes the older Cloud Foundry-based broker registration flow (<code>cf create-service-broker</code> and friends). With BTP CLI 2.106+ the <code>btp register services/broker</code> command above is the supported path — it works against any subaccount in the global account regardless of CF org/space layout.</p>
 </blockquote>
 <h2>Scoped Credentials per Team</h2>
 <p>When a consumer creates a binding through the broker, they receive a credential that is fundamentally different from the provider's:</p>
@@ -105,9 +106,9 @@ spec:
 <consumer-id>!b65018|xsuaa_aicaas!b77089.provider.<provider-id>
 uaa.resource
 </li-code>
-<p>The token also carries <code>ext_attr.serviceinstanceid</code> -- the consumer's own service instance ID. In Part 2 the proxy uses this exact field to identify who is calling.</p>
+<p>The token also carries <code>ext_attr.serviceinstanceid</code> — the consumer's own service instance ID. In Part 2 the proxy uses this exact field to identify who is calling.</p>
 <h2>Deployment Protection</h2>
-<p>The <code>userDeployments: false</code> flag in the YAML is what enforces this. Any attempt by a consumer to create a deployment is denied at the AI Core boundary -- before it touches Kubernetes or the orchestration runtime:</p>
+<p>The <code>userDeployments: false</code> flag in the YAML is what enforces this. Any attempt by a consumer to create a deployment is denied at the AI Core boundary — before it touches Kubernetes or the orchestration runtime:</p>
 <li-code lang="bash">curl -s -X POST "$AI_API_URL/v2/lm/deployments" \
   -H "Authorization: Bearer $CONSUMER_TOKEN" \
   -H "AI-Resource-Group: shared" \
@@ -119,7 +120,7 @@ RBAC: access denied
 </li-code>
 <p>Only the provider controls what is deployed and available.</p>
 <h2>Resource Group Isolation</h2>
-<p>AI Core organises work into resource groups, and the provider typically has several -- development environments, production workloads, project spaces. Consumers can only see the <code>shared</code> resource group. Everything else is invisible:</p>
+<p>AI Core organises work into resource groups, and the provider typically has several — development environments, production workloads, project spaces. Consumers can only see the <code>shared</code> resource group. Everything else is invisible:</p>
 <li-code lang="bash"># Consumer tries to list deployments in the provider's "default" RG
 curl -s "$AI_API_URL/v2/lm/deployments" \
   -H "Authorization: Bearer $CONSUMER_TOKEN" \
@@ -136,9 +137,9 @@ curl -s "$AI_API_URL/v2/lm/deployments" \
   ]
 }
 </li-code>
-<p>In summary, CaaS gives you scoped credentials, deployment protection, and resource group isolation out of the box -- SAP-native, zero custom code.</p>
+<p>In summary, CaaS gives you scoped credentials, deployment protection, and resource group isolation out of the box — SAP-native, zero custom code.</p>
 <h2>Model Restriction Without Orchestration</h2>
-<p>There is one more thing CaaS gives you natively: <strong>model restriction</strong>, but only if you give up orchestration. If you do not need templating, content filtering, grounding or data masking, you can deploy each allowed model individually in the shared RG and skip orchestration. The consumer calls them with the native provider inference endpoint -- for OpenAI models that is the Azure-compatible chat completions API:</p>
+<p>There is one more thing CaaS gives you natively: <strong>model restriction</strong>, but only if you give up orchestration. If you do not need templating, content filtering, grounding or data masking, you can deploy each allowed model individually in the shared RG and skip orchestration. The consumer calls them with the native provider inference endpoint — for OpenAI models that is the Azure-compatible chat completions API:</p>
 <li-code lang="bash">curl -s -X POST \
   "$AI_API_URL/v2/inference/deployments/<deployment-id>/chat/completions?api-version=2024-02-01" \
   -H "Authorization: Bearer $CONSUMER_TOKEN" \
@@ -153,10 +154,10 @@ curl -s "$AI_API_URL/v2/lm/deployments" \
   "usage": {"prompt_tokens": 9, "completion_tokens": 10, "total_tokens": 19}
 }
 </li-code>
-<p>Models that are not deployed simply do not exist for the consumer -- a 404 from AI Core, not a custom error. The trade-off: you lose all orchestration features. No prompt templating, no centralised content filtering, no grounding, no data masking. For simple chat-completion use cases this is enough. For workflows that need safety guardrails, it is not -- which is where Part 2 begins.</p>
+<p>Models that are not deployed simply do not exist for the consumer — a 404 from AI Core, not a custom error. The trade-off: you lose all orchestration features. No prompt templating, no centralised content filtering, no grounding, no data masking. For simple chat-completion use cases this is enough. For workflows that need safety guardrails, it is not — which is where Part 2 begins.</p>
 <h1>Part 2: Custom Governance Proxy</h1>
 <p>Once orchestration is deployed in the shared resource group, every consumer can request any of the 50+ models through it. Orchestration is a universal model router, and there is no native configuration to restrict which models a specific consumer can use, to track per-team token spend, or to mandate content-safety filters. Even Token Tracking per Team - or maintaining certain orchestration configurations centrally - is technically feasible if we can put a gouvernance proxy in between the consuming team and the centrally hosted AI Core Endpoints.</p>
-<p>The honest assessment up front: <strong>this proxy approach scales cleanly when you only proxy the orchestration endpoint.</strong> Orchestration is one unified API with one body schema. The moment you also want to govern direct provider deployments -- OpenAI chat-completions, Anthropic Messages API, Google Gemini -- each schema needs its own model-extraction logic, its own streaming format, its own token usage infos. You end up maintaining a small adapter zoo, and the proxy stops being a thin layer. So when building such a proxy - limitations need to be thought of smartly.</p>
+<p>The honest assessment up front: <strong>this proxy approach scales cleanly when you only proxy the orchestration endpoint.</strong> Orchestration is one unified API with one body schema. The moment you also want to govern direct provider deployments — OpenAI chat-completions, Anthropic Messages API, Google Gemini — each schema needs its own model-extraction logic, its own streaming format, its own token usage infos. You end up maintaining a small adapter zoo, and the proxy stops being a thin layer. So when building such a proxy - limitations need to be thought of smartly.</p>
 <h2>Where the Proxy Goes</h2>
 <li-code lang="markup">Consumer App  -->  Governance Proxy  -->  AI Core Orchestration  -->  Foundation Model
                   (same API)              (consumer credentials)     (token-based)
@@ -172,7 +173,7 @@ curl -s "$AI_API_URL/v2/lm/deployments" \
         serviceUrls:
           AI_API_URL: https://governance-proxy.cfapps.sap.hana.ondemand.com
 </li-code>
-<p>The next time a consumer requests a binding, their service key contains the proxy URL as <code>AI_API_URL</code>. Their SDK, their CLI, their notebook -- all start talking to the proxy without code changes. The Bearer token they send is unchanged: it is still a CaaS-issued JWT, signed by the consumer's own identity zone, carrying <code>ext_attr.serviceinstanceid</code>. And this is the beauty of this approach - we still give teams the chance to provision the service - get their own service keys and manage them - via the native BTP ways - by hijacking a bit this CaaS approach by infusing a proxy layer. You could of course taks care yourself of hosting a proxy that then authenticates clients with some sort of credentials - but this way a bunch of things are given out of the box. </p>
+<p>The next time a consumer requests a binding, their service key contains the proxy URL as <code>AI_API_URL</code>. Their SDK, their CLI, their notebook — all start talking to the proxy without code changes. The Bearer token they send is unchanged: it is still a CaaS-issued JWT, signed by the consumer's own identity zone, carrying <code>ext_attr.serviceinstanceid</code>. And this is the beauty of this approach - we still give teams the chance to provision the service - get their own service keys and manage them - via the native BTP ways - by hijacking a bit this CaaS approach by infusing a proxy layer. You could of course taks care yourself of hosting a proxy that then authenticates clients with some sort of credentials - but this way a bunch of things are given out of the box. </p>
 <h2>A Minimal Proxy</h2>
 <p>The full proxy is a single 90-line <code>main.py</code>. It does three things:</p>
 <ul>
@@ -241,8 +242,8 @@ async def passthrough(path: str, request: Request):
     return Response(content=resp.content, status_code=resp.status_code,
                     media_type=resp.headers.get("content-type"))
 </li-code>
-<p>The allowlist is <strong>global</strong> here -- the rule applies to every consumer that goes through this proxy. A common reason to do this is vendor trust: an organisation may decide that for a given environment only OpenAI models are approved while Anthropic, Google or Meta models require additional review. With orchestration the model name is in the request body, so a constant set at the top of the proxy is enough to enforce it.</p>
-<p>When you do need per-team allowlists or budgets, swap the constant for a database lookup keyed by <code>ext_attr.serviceinstanceid</code> from the JWT -- the consumer identity is already in every request, you just have to use it.</p>
+<p>The allowlist is <strong>global</strong> here — the rule applies to every consumer that goes through this proxy. A common reason to do this is vendor trust: an organisation may decide that for a given environment only OpenAI models are approved while Anthropic, Google or Meta models require additional review. With orchestration the model name is in the request body, so a constant set at the top of the proxy is enough to enforce it.</p>
+<p>When you do need per-team allowlists or budgets, swap the constant for a database lookup keyed by <code>ext_attr.serviceinstanceid</code> from the JWT — the consumer identity is already in every request, you just have to use it.</p>
 <p>Deployment is a one-line <code>cf push</code> against a 9-line <code>manifest.yml</code>. The full source is in the <code>governance-proxy/</code> directory of the GitHub repository.</p>
 <h2>Result</h2>
 <p>With the YAML in Part 2 applied and the proxy deployed at <code>governance-proxy.cfapps.sap.hana.ondemand.com</code>, here is what the consumer sees.</p>
@@ -295,7 +296,7 @@ async def passthrough(path: str, request: Request):
   "allowed": ["gpt-4o", "gpt-4o-mini", "gpt-5"]
 }
 </li-code>
-<p><strong>Non-orchestration calls pass straight through.</strong> The consumer's CaaS scopes still constrain what they can reach -- listing deployments works, but only in the <code>shared</code> RG:</p>
+<p><strong>Non-orchestration calls pass straight through.</strong> The consumer's CaaS scopes still constrain what they can reach — listing deployments works, but only in the <code>shared</code> RG:</p>
 <li-code lang="bash">curl -s "https://governance-proxy.cfapps.sap.hana.ondemand.com/v2/lm/deployments" \
   -H "Authorization: Bearer $CONSUMER_TOKEN" \
   -H "AI-Resource-Group: shared"
@@ -312,4 +313,4 @@ async def passthrough(path: str, request: Request):
 </ul>
 <p>The pattern is the same in every case: a transparent proxy that the consumer cannot distinguish from AI Core, with governance logic applied between authentication and forwarding. CaaS gives you the credential isolation; the proxy gives you everything you want to enforce on top of it.</p>
 <h1>Conclusion</h1>
-<p>This blog showed how to achieve deeper levels of governance on top of the AI Foundation for custom AI use cases on BTP. We walked through setting up CaaS for AI Core, what isolation it gives you out of the box, and how a small proxy can fill the gaps when orchestration is shared. I hope you enjoyed the content -- leave any comments below.</p>
+<p>This blog showed how to achieve deeper levels of governance on top of the AI Foundation for custom AI use cases on BTP. We walked through setting up CaaS for AI Core, what isolation it gives you out of the box, and how a small proxy can fill the gaps when orchestration is shared. I hope you enjoyed the content — leave any comments below.</p>

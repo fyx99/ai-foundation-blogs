@@ -10,6 +10,8 @@ This guide is split in two parts.
 
 All examples use a real test environment: a provider subaccount that owns the AI Core instance, and a consumer subaccount that consumes through CaaS. Every curl and JSON response shown was captured live. This blog's purpose is to show you what is possible and where you need to head to achieve it.
 
+![Scenario: provider subaccount owning AI Core, consumer subaccounts consuming through CaaS, with an optional governance proxy in between](scenario.jpg)
+
 
 ## One Instance per Team -- or One for Everyone?
 
