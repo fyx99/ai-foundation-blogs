@@ -66,7 +66,7 @@ spec:
 <p><img alt="Service instance with binding and credentials JSON, identical in shape to a regular AI Core key" src="image-created-consumer-instance.png" /></p>
 <p>This is the point of CaaS: from the consumer team's perspective they just consumed a managed service. From the provider's perspective every credential handed out is structurally constrained.</p>
 <blockquote>
-<p>The official AI Core CaaS documentation still describes the older Cloud Foundry-based broker registration flow (<code>cf create-service-broker</code> and friends). With BTP CLI 2.106+ the <code>btp register services/broker</code> command above is the supported path — it works against any subaccount in the global account regardless of CF org/space layout.</p>
+<p>The official AI Core CaaS documentation still describes the older Cloud Foundry-based broker registration flow. With BTP CLI 2.106+ the <code>btp register services/broker</code> command above is the supported path — it works against any subaccount in the global account regardless of CF org/space layout. </p>
 </blockquote>
 <h2>Scoped Credentials per Team</h2>
 <p>When a consumer creates a binding through the broker, they receive a credential that is fundamentally different from the provider's:</p>
@@ -318,4 +318,4 @@ async def passthrough(path: str, request: Request):
 </ul>
 <p>The pattern is the same in every case: a transparent proxy that the consumer cannot distinguish from AI Core, with governance logic applied between authentication and forwarding. CaaS gives you the credential isolation; the proxy gives you everything you want to enforce on top of it.</p>
 <h1>Conclusion</h1>
-<p>This blog showed how to achieve deeper levels of governance on top of the AI Foundation for custom AI use cases on BTP. We walked through setting up CaaS for AI Core, what isolation it gives you out of the box, and how a small proxy can fill the gaps when orchestration is shared. I hope you enjoyed the content — leave any comments below.</p>
+<p>This blog showed how to achieve deeper levels of governance on top of the AI Foundation for custom AI use cases on BTP. We walked through setting up CaaS for AI Core, what isolation it gives you out of the box, and how a small proxy can fill the gaps when orchestration is shared. Checkout this blog to read more on tracking tokens with Generative AI Hub https://community.sap.com/t5/technology-blog-posts-by-sap/monitor-token-usage-with-sap-generative-ai-hub/ba-p/13979768. I hope you enjoyed the content — leave any comments below.</p>

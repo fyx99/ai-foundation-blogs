@@ -99,7 +99,7 @@ The consumer creates a service instance, then a service key (binding). The crede
 
 This is the point of CaaS: from the consumer team's perspective they just consumed a managed service. From the provider's perspective every credential handed out is structurally constrained.
 
-> The official AI Core CaaS documentation still describes the older Cloud Foundry-based broker registration flow (`cf create-service-broker` and friends). With BTP CLI 2.106+ the `btp register services/broker` command above is the supported path -- it works against any subaccount in the global account regardless of CF org/space layout.
+> The official AI Core CaaS documentation still describes the older Cloud Foundry-based broker registration flow. With BTP CLI 2.106+ the `btp register services/broker` command above is the supported path -- it works against any subaccount in the global account regardless of CF org/space layout. 
 
 ## Scoped Credentials per Team
 
@@ -397,6 +397,6 @@ The pattern is the same in every case: a transparent proxy that the consumer can
 
 # Conclusion
 
-This blog showed how to achieve deeper levels of governance on top of the AI Foundation for custom AI use cases on BTP. We walked through setting up CaaS for AI Core, what isolation it gives you out of the box, and how a small proxy can fill the gaps when orchestration is shared. I hope you enjoyed the content -- leave any comments below.
+This blog showed how to achieve deeper levels of governance on top of the AI Foundation for custom AI use cases on BTP. We walked through setting up CaaS for AI Core, what isolation it gives you out of the box, and how a small proxy can fill the gaps when orchestration is shared. Checkout this blog to read more on tracking tokens with Generative AI Hub https://community.sap.com/t5/technology-blog-posts-by-sap/monitor-token-usage-with-sap-generative-ai-hub/ba-p/13979768. I hope you enjoyed the content -- leave any comments below.
 
 
