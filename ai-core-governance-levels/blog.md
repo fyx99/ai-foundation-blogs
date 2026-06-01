@@ -89,6 +89,16 @@ btp register services/broker \
 
 After that, the consumer is self-service: they create a service instance through the BTP catalog, then a binding, and receive credentials that include the injected `AI_API_URL`. Their SAP AI SDK uses those credentials without knowing or caring that a proxy may sit in front.
 
+Once the broker is registered, `foundation-model-service` shows up in the consumer's BTP Service Marketplace just like any other service -- there is no AI Core-specific UI, the consumer treats it as a standard managed service:
+
+![foundation-model-service tile in the consumer's BTP Service Marketplace](image-service-marketplace.png)
+
+The consumer creates a service instance, then a service key (binding). The credentials look exactly like a "normal" AI Core service key would -- `clientid`, `clientsecret`, `url` (the consumer's identity zone), and the `AI_API_URL` that was injected by the provider's YAML:
+
+![Service instance with binding and credentials JSON, identical in shape to a regular AI Core key](image-created-consumer-instance.png)
+
+This is the point of CaaS: from the consumer team's perspective they just consumed a managed service. From the provider's perspective every credential handed out is structurally constrained.
+
 > The official AI Core CaaS documentation still describes the older Cloud Foundry-based broker registration flow (`cf create-service-broker` and friends). With BTP CLI 2.106+ the `btp register services/broker` command above is the supported path -- it works against any subaccount in the global account regardless of CF org/space layout.
 
 ## Scoped Credentials per Team
