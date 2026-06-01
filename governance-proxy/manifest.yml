@@ -1,0 +1,9 @@
+---
+applications:
+- name: governance-proxy
+  memory: 256M
+  disk_quota: 1024M
+  buildpack: python_buildpack
+  command: uvicorn main:app --host 0.0.0.0 --port $PORT
+  env:
+    AICORE_API_URL: https://api.ai.internalprod.eu-central-1.aws.ml.hana.ondemand.com
