@@ -1,0 +1,69 @@
+<p>Today we are looking at a quick setup of <strong>OpenCode</strong> in Business Application Studio, using <strong>SAP AI Core</strong> as the backbone for LLMs. This is useful if you want a coding agent fully enabled by BTP components — without any local installation on your machine. In general this also works in VS Code.</p>
+<p><li-image width="652" height="562" alt="opencode-scenario.jpg" align="center" id="483017iA1EA2EBCB5D039BA" size="large" sourceType="new"></li-image></p>
+<h2>Prerequisites</h2>
+<ul>
+<li>Business Application Studio</li>
+<li>SAP AI Core instance + AI Core service key</li>
+<li>Resource Group exists in AI Core</li>
+<li>Orchestration Deployment exists in the Resource Group on AI Core</li>
+</ul>
+<p>If you are unsure about the AI Core part, check out this tutorial: <a href="https://developers.sap.com/tutorials/ai-core-genaihub-provisioning/">Provisioning Generative AI Hub in SAP AI Core</a>.</p>
+<h2>Install OpenCode</h2>
+<p>Basically, follow the <a href="https://opencode.ai/docs/">official installation guide</a> — at the time of writing this is done with the following command:</p>
+<li-code lang="bash">curl -fsSL https://opencode.ai/install | bash
+</li-code>
+<p><li-image width="999" height="670" alt="opencode-install-success.png" align="center" id="483014iDEC3254D3F666376" size="large" sourceType="new"></li-image></p>
+<h3>Check if it's working</h3>
+<p>Just type:</p>
+<li-code lang="bash">opencode
+</li-code>
+<p>and see how it loads up. If you are doing this on your local machine, make sure to add it to your shell config (<code>.bashrc</code> / <code>.zshrc</code>).</p>
+<h2>Hook up SAP AI Core as integration</h2>
+<p>In OpenCode, use <code>/connect</code> to search for <strong>SAP AI Core</strong>. Here you need to hand in a service key and submit with Enter.</p>
+<p><li-image width="999" height="525" alt="opencode-connect-1.png" align="center" id="483012i5BE5E3EB0EB183CA" size="large" sourceType="new"></li-image></p>
+<p>Search for SAP AI Core</p>
+<p><li-image width="999" height="525" alt="opencode-connect-select-ai-core.png" align="center" id="483013i8CE6FFC299C20DAF" size="large" sourceType="new"></li-image></p>
+<p>Paste your AI Core Service Key</p>
+<p><li-image width="999" height="525" alt="opencode-connect-provide-servicekey.png" align="center" id="483015iC450AA423B09E232" size="large" sourceType="new"></li-image></p>
+<p>And select a model. It could be that you are also asked for the thinking effort. Here you will see all the models available in orchestration — see <a href="https://me.sap.com/notes/3437766">SAP Note 3437766</a>.</p>
+<p><li-image width="999" height="525" alt="opencode-connect-select-model.png" align="center" id="483016i592A2E19A864056A" size="large" sourceType="new"></li-image></p>
+<p>Then you can try it out and ask "Hi" — this might work.</p>
+<p>For me the <code>/connect</code> flow didn't always stick, so the reliable route is to push the service key into the background service directly (use SINGLE quotes — the <code>$</code> in the clientsecret must stay literal):</p>
+<li-code lang="bash"># 1) Write the service key into the background service as an env var
+opencode service set env AICORE_SERVICE_KEY '{"clientid":"&lt;CLIENT_ID&gt;","clientsecret":"&lt;CLIENT_SECRET&gt;","url":"https://&lt;your-tenant&gt;.authentication.sap.hana.ondemand.com","serviceurls":{"AI_API_URL":"https://&lt;ai-api-host&gt;.ml.hana.ondemand.com"}}'
+
+# 2) Set the resource group
+opencode service set env AICORE_RESOURCE_GROUP 'default'
+
+# 3) Restart the service so it inherits the env
+opencode service restart
+
+# 4) Verify the credential was registered
+opencode auth list | grep -i "sap ai core"
+</li-code>
+<p>So: <strong>first create the AI Core integration, then restart OpenCode with the new environment.</strong> From here the credentials are set — but there is one more thing before the agent actually works.</p>
+<h2>Hitting "Schema validation failed"?</h2>
+<p>The moment you ask for something real — build a plan, create an agent, use a tool — you will likely see the turn fall apart like this, with <code>Error: Schema validation failed</code> after every message:</p>
+<p><li-image width="999" height="361" alt="opencode-possible-error.png" align="center" id="483032iB6E4A88D03FD26B0" size="large" sourceType="new"></li-image></p>
+<p>A plain "hi" may still answer (with that error trailing behind it), but anything that makes the agent plan or call a tool dies and nothing renders. Third-party models (DeepSeek and friends) work fine, which makes it look like an AI Core problem — it isn't.</p>
+<p><strong>TL;DR — you need an OpenCode config.</strong> Create <code>opencode.json</code> (global at <code>~/.config/opencode/opencode.json</code>, or in your project root) with this one override, then <code>opencode service restart</code>:</p>
+<li-code lang="jsonc">{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "sap-ai-core": {
+      "npm": "@jerome-benoit/sap-ai-provider@5.1.2"
+    }
+  }
+}
+</li-code>
+<p>Nothing else changes — same service key, same models, same model IDs. That's the whole fix.</p>
+<h3>Why this happens</h3>
+<p>OpenCode (≥ 2.4) talks to providers through the AI SDK <strong>V3</strong> interface, where a finish reason is an object <code>{ normalized, raw }</code> validated against a fixed set (<code>stop | length | tool-calls | content-filter | error | unknown</code>). But the model registry wires <code>sap-ai-core</code> to the provider's <strong>V2</strong> package, where the finish reason is a plain string. The V2→V3 bridge turns <code>"unknown"</code> (and anything it can't classify) into <code>"other"</code> — a value OpenCode's own schema rejects, so the turn is dropped.</p>
+<p>The override above simply points <code>sap-ai-core</code> at the provider's <strong>V3 package</strong> (<code>@jerome-benoit/sap-ai-provider</code>) instead of the <code>-v2</code> one, which emits the object shape OpenCode expects. I pinned it to <code>5.1.2</code> (the version this post was tested on); drop the <code>@5.1.2</code> if you'd rather always pull the latest.</p>
+<p>This is tracked upstream — <a href="https://github.com/anomalyco/models.dev/issues/14467">models.dev#14467</a> (registry should point at the V3 package) and <a href="https://github.com/anomalyco/opencode/issues/66153">opencode#66153</a> (the finish-reason bridge). Once either lands, you can drop the override entirely. Full write-up and a reproducible before/after script: <a href="https://github.com/fyx99/opencode-sap-ai-core-fix">opencode-sap-ai-core-fix</a>.</p>
+<h2>The result</h2>
+<p>With the config in place, restart and the same prompt that blew up before now runs end to end — the agent explores the workspace, reads files, calls tools, and builds its plan, all on <code>GPT-6.1 Sol · SAP AI Core</code>:</p>
+<p><li-image width="999" height="788" alt="opencode-success.png" align="center" id="483033i8CD4F98977673401" size="large" sourceType="new"></li-image></p>
+<p>From here you have a fully working coding agent on SAP AI Core — start it with <code>opencode</code>, pick your model with <code>/models</code> (e.g. <code>sap-ai-core/anthropic--claude-4.6-sonnet</code>, <code>sap-ai-core/gpt-6.1-sol</code>), and go.</p>
+<h2>Alternative</h2>
+<p>Also check out the setup with Cline as an alternative: <a href="https://community.sap.com/t5/tooling-sap-build-blog-posts/using-cline-with-sap-ai-core-in-vs-code-a-complete-setup-guide/ba-p/14301572">Using Cline with SAP AI Core in VS Code — A Complete Setup Guide</a>.</p>
